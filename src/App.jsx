@@ -25,7 +25,9 @@ const INITIAL_FILTERS = {
   bonusType: '',
 };
 
+const DEFAULT_RANKING_LIMIT = 20;
 const COLLAPSED_TOP_LIMIT = 5;
+const RANKING_LIMIT_OPTIONS = [10, 20, 50];
 
 const filterLabels = {
   search: 'Busca',
@@ -133,6 +135,226 @@ function formatFileSize(bytes) {
   const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const amount = bytes / 1024 ** power;
   return `${amount.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${units[power]}`;
+}
+
+function escapeMarkdownCell(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' ');
+}
+
+function buildMarkdownTable(headers, rows) {
+  const headerLine = `| ${headers.map(escapeMarkdownCell).join(' | ')} |`;
+  const separatorLine = `| ${headers.map(() => '---').join(' | ')} |`;
+  const bodyLines =
+    rows.length === 0
+      ? [`| ${headers.map((_, index) => (index === 0 ? 'Nenhum registro encontrado.' : '')).join(' | ')} |`]
+      : rows.map((row) => `| ${row.map(escapeMarkdownCell).join(' | ')} |`);
+
+  return [headerLine, separatorLine, ...bodyLines].join('\n');
+}
+
+function escapeCsvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function buildCsv(headers, rows) {
+  return [headers, ...rows].map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
+}
+
+function getSimpleTableData(section, rows) {
+  return {
+    headers: ['#', section.nameLabel, section.valueLabel],
+    rows: rows.map((row, index) => [
+      index + 1,
+      row.name,
+      formatValue(row.value, section.valueType),
+    ]),
+  };
+}
+
+function getFinancialTableData(rows) {
+  return {
+    headers: [
+      'Campanha',
+      'Jogo / Template',
+      'Qtd envios',
+      'Qtd enviada',
+      'Custo financeiro total',
+      'Custo medio por envio',
+    ],
+    rows: rows.map((row) => [
+      row.campaignName,
+      row.templateName,
+      formatNumber(row.sentCount),
+      formatDecimal(row.sentAmount),
+      formatDecimal(row.financialCostTotal),
+      formatDecimal(row.averageFinancialCostPerSend),
+    ]),
+  };
+}
+
+function makeDownloadName(baseName, extension) {
+  return `${baseName}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+}
+
+function getActiveFilterLabel(filters) {
+  const activeFilters = getActiveFilters(filters);
+  if (activeFilters.length === 0) return 'Nenhum filtro ativo';
+
+  return activeFilters.map(([key, value]) => `${filterLabels[key]}: ${value}`).join('; ');
+}
+
+function getTopLabel(row, valueLabel, valueType) {
+  if (!row) return 'Sem dados no recorte atual.';
+  return `${row.name} (${valueLabel}: ${formatValue(row.value, valueType)})`;
+}
+
+function getFinancialTopLabel(row) {
+  if (!row) return 'Sem dados no recorte atual.';
+
+  return `${row.campaignName} / ${row.templateName} (custo financeiro total: ${formatDecimal(
+    row.financialCostTotal,
+  )})`;
+}
+
+function buildReportMarkdown({ results, rankingLimit, filters }) {
+  const financialRows = (results[financialCostSection.key] || []).slice(0, rankingLimit);
+  const summaryRows = summaryCards.map((card) => [
+    card.label,
+    formatValue(results.summary[card.key], card.type),
+  ]);
+
+  const rankingSections = resultSections.map((section) => {
+    const tableData = getSimpleTableData(section, (results[section.key] || []).slice(0, rankingLimit));
+    return [`### ${section.title}`, buildMarkdownTable(tableData.headers, tableData.rows)].join('\n\n');
+  });
+  const financialTableData = getFinancialTableData(financialRows);
+
+  return [
+    '# Relatorio do analisador de bonus',
+    '',
+    `Recorte: ${getActiveFilterLabel(filters)}`,
+    `Ranking: Top ${rankingLimit}`,
+    '',
+    '## Resumo geral',
+    '',
+    buildMarkdownTable(['Metrica', 'Valor'], summaryRows),
+    '',
+    '## Destaques automaticos',
+    '',
+    `- Maior campanha por envios: ${getTopLabel(
+      results.topCampaignsByCount?.[0],
+      'envios',
+      'integer',
+    )}`,
+    `- Maior campanha por bonus_amount: ${getTopLabel(
+      results.topCampaignsByAmount?.[0],
+      'bonus_amount',
+      'decimal',
+    )}`,
+    `- Maior template por envios: ${getTopLabel(
+      results.topTemplatesByCount?.[0],
+      'envios',
+      'integer',
+    )}`,
+    `- Maior template por bonus_amount: ${getTopLabel(
+      results.topTemplatesByAmount?.[0],
+      'bonus_amount',
+      'decimal',
+    )}`,
+    `- Maior cashback por valor: ${getTopLabel(results.topCashbackByValue?.[0], 'valor', 'decimal')}`,
+    `- Maior campanha+jogo por custo financeiro: ${getFinancialTopLabel(
+      results.topFinancialCostByCampaignTemplate?.[0],
+    )}`,
+    '',
+    '## Principais rankings',
+    '',
+    ...rankingSections.flatMap((sectionMarkdown) => [sectionMarkdown, '']),
+    '## Campanhas e jogos por custo financeiro',
+    '',
+    'Comparativo entre campanha e jogo/template por custo financeiro.',
+    '',
+    buildMarkdownTable(financialTableData.headers, financialTableData.rows),
+    '',
+  ].join('\n');
+}
+
+function buildCampaignReportMarkdown({ report, filters, headingLevel = 1 }) {
+  const summaryRows = [
+    ['Campanha', report.campaignName],
+    ['Envios', formatNumber(report.sentCount)],
+    ['Quantidade enviada', formatDecimal(report.sentAmount)],
+    ['Custo financeiro total', formatDecimal(report.financialCostTotal)],
+    ['Custo medio por envio', formatDecimal(report.averageFinancialCostPerSend)],
+    ['Templates unicos', formatNumber(report.uniqueTemplates)],
+    ['Linhas de cashback', formatNumber(report.cashbackRows)],
+    ['Total de cashback', formatDecimal(report.cashbackAmount)],
+  ];
+  const templatesByCount = getSimpleTableData(
+    {
+      key: 'campaignTemplatesByCount',
+      nameLabel: 'Template',
+      valueLabel: 'Envios',
+      valueType: 'integer',
+    },
+    report.topTemplatesByCount || [],
+  );
+  const templatesByAmount = getSimpleTableData(
+    {
+      key: 'campaignTemplatesByAmount',
+      nameLabel: 'Template',
+      valueLabel: 'Bonus amount',
+      valueType: 'decimal',
+    },
+    report.topTemplatesByAmount || [],
+  );
+  const financialRows = getFinancialTableData(report.topFinancialCostByTemplate || []);
+
+  return [
+    `${'#'.repeat(headingLevel)} Relatorio da campanha: ${report.campaignName}`,
+    '',
+    `Recorte: ${getActiveFilterLabel(filters)}`,
+    '',
+    '## Resumo da campanha',
+    '',
+    buildMarkdownTable(['Metrica', 'Valor'], summaryRows),
+    '',
+    '## Templates por envios',
+    '',
+    buildMarkdownTable(templatesByCount.headers, templatesByCount.rows),
+    '',
+    '## Templates por bonus_amount',
+    '',
+    buildMarkdownTable(templatesByAmount.headers, templatesByAmount.rows),
+    '',
+    '## Campanha e jogos por custo financeiro',
+    '',
+    buildMarkdownTable(financialRows.headers, financialRows.rows),
+    '',
+  ].join('\n');
+}
+
+function buildCampaignReportsMarkdown({ reports, sectionTitle, filters }) {
+  if (reports.length === 0) {
+    return [
+      `# Relatorios de campanhas: ${sectionTitle}`,
+      '',
+      `Recorte: ${getActiveFilterLabel(filters)}`,
+      '',
+      'Nenhuma campanha encontrada no recorte atual.',
+      '',
+    ].join('\n');
+  }
+
+  return [
+    `# Relatorios de campanhas: ${sectionTitle}`,
+    '',
+    `Recorte: ${getActiveFilterLabel(filters)}`,
+    '',
+    ...reports.flatMap((report) => [buildCampaignReportMarkdown({ report, filters, headingLevel: 2 }), '']),
+  ].join('\n');
 }
 
 function SummaryCard({ card, value }) {
@@ -322,6 +544,10 @@ function TopChart({ section, rows }) {
   );
 }
 
+function isCampaignSection(section) {
+  return section.key === 'topCampaignsByCount' || section.key === 'topCampaignsByAmount';
+}
+
 function ResultsTable({ section, rows }) {
   return (
     <div className="table-wrap">
@@ -345,7 +571,7 @@ function ResultsTable({ section, rows }) {
               <tr key={`${section.key}-${row.name}-${index}`}>
                 <td>{index + 1}</td>
                 <td title={row.name}>{row.name}</td>
-                <td>{formatValue(row.value, section.valueType)}</td>
+                <td className="number-cell">{formatValue(row.value, section.valueType)}</td>
               </tr>
             ))
           )}
@@ -355,35 +581,128 @@ function ResultsTable({ section, rows }) {
   );
 }
 
-function SectionToggle({ isExpanded, totalRows, onToggle }) {
+function getVisibleRows(rows, rankingLimit, isExpanded) {
+  return rows.slice(0, isExpanded ? rankingLimit : COLLAPSED_TOP_LIMIT);
+}
+
+function getSectionCountLabel(rows, visibleRows, rankingLimit) {
+  if (visibleRows.length === 0) return '0 registros';
+  const availableRows = Math.min(rows.length, rankingLimit);
+  return `Top ${visibleRows.length} de ${availableRows}`;
+}
+
+function SectionToggle({ isExpanded, totalRows, rankingLimit, onToggle }) {
   if (totalRows <= COLLAPSED_TOP_LIMIT) return null;
 
   return (
-    <button type="button" className="section-toggle-button" onClick={onToggle}>
-      {isExpanded ? 'Mostrar Top 5' : `Mostrar Top ${totalRows}`}
+    <button type="button" className="compact-button" onClick={onToggle}>
+      {isExpanded ? 'Mostrar Top 5' : `Mostrar mais`}
     </button>
   );
 }
 
-function getVisibleRows(rows, isExpanded) {
-  return isExpanded ? rows : rows.slice(0, COLLAPSED_TOP_LIMIT);
+function TableActions({ copied, campaignReportCopied, showCampaignReport, onCopy, onExport, onCopyCampaignReports }) {
+  return (
+    <>
+      {copied && <span className="copy-feedback">Copiado</span>}
+      <button type="button" className="compact-button" onClick={onCopy}>
+        Copiar tabela
+      </button>
+      {showCampaignReport && (
+        <>
+          {campaignReportCopied && <span className="copy-feedback">Copiado</span>}
+          <button type="button" className="compact-button" onClick={onCopyCampaignReports}>
+            Copiar relatorio
+          </button>
+        </>
+      )}
+      <button type="button" className="compact-button" onClick={onExport}>
+        Exportar CSV
+      </button>
+    </>
+  );
 }
 
-function getSectionCountLabel(totalRows, visibleRows) {
-  if (totalRows === 0) return '0 registros';
-  return `Top ${visibleRows.length} de ${totalRows}`;
+function ReportPanel({
+  copied,
+  rankingLimit,
+  onCopyReport,
+  onDownloadReport,
+  onRankingLimitChange,
+}) {
+  return (
+    <section className="report-panel">
+      <div>
+        <h2>Relatorio geral</h2>
+        <p>Gera um resumo copiavel com destaques, rankings e comparativo financeiro.</p>
+      </div>
+
+      <div className="report-actions">
+        <label className="ranking-control" htmlFor="ranking-limit">
+          <span>Ranking</span>
+          <select
+            id="ranking-limit"
+            value={rankingLimit}
+            onChange={(event) => onRankingLimitChange(Number(event.target.value))}
+          >
+            {RANKING_LIMIT_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                Top {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="report-button-row">
+          {copied && <span className="copy-feedback">Copiado</span>}
+          <button type="button" className="compact-button" onClick={onCopyReport}>
+            Copiar relatorio
+          </button>
+          <button type="button" className="compact-button" onClick={() => onDownloadReport('md')}>
+            Baixar .md
+          </button>
+          <button type="button" className="compact-button" onClick={() => onDownloadReport('txt')}>
+            Baixar .txt
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function AnalysisSection({ section, rows, isExpanded, onToggle }) {
-  const visibleRows = getVisibleRows(rows, isExpanded);
+function AnalysisSection({
+  section,
+  rows,
+  rankingLimit,
+  isExpanded,
+  copiedAction,
+  onCopyTable,
+  onExportCsv,
+  onToggle,
+  onCopyCampaignReports,
+}) {
+  const visibleRows = getVisibleRows(rows, rankingLimit, isExpanded);
+  const showCampaignReport = isCampaignSection(section);
 
   return (
     <section className="analysis-section">
       <div className="section-title">
         <h2>{section.title}</h2>
         <div className="section-actions">
-          <span>{getSectionCountLabel(rows.length, visibleRows)}</span>
-          <SectionToggle isExpanded={isExpanded} totalRows={rows.length} onToggle={onToggle} />
+          <span>{getSectionCountLabel(rows, visibleRows, rankingLimit)}</span>
+          <SectionToggle
+            isExpanded={isExpanded}
+            totalRows={Math.min(rows.length, rankingLimit)}
+            rankingLimit={rankingLimit}
+            onToggle={onToggle}
+          />
+          <TableActions
+            copied={copiedAction === `table-${section.key}`}
+            campaignReportCopied={copiedAction === `campaign-table-${section.key}`}
+            showCampaignReport={showCampaignReport}
+            onCopy={() => onCopyTable(section, visibleRows)}
+            onExport={() => onExportCsv(section, visibleRows)}
+            onCopyCampaignReports={() => onCopyCampaignReports(section, visibleRows)}
+          />
         </div>
       </div>
 
@@ -434,16 +753,34 @@ function FinancialCostTable({ rows }) {
   );
 }
 
-function FinancialCostSection({ rows, isExpanded, onToggle }) {
-  const visibleRows = getVisibleRows(rows, isExpanded);
+function FinancialCostSection({
+  rows,
+  rankingLimit,
+  isExpanded,
+  copiedAction,
+  onCopyTable,
+  onExportCsv,
+  onToggle,
+}) {
+  const visibleRows = getVisibleRows(rows, rankingLimit, isExpanded);
 
   return (
     <section className="analysis-section analysis-section--financial">
       <div className="section-title">
         <h2>{financialCostSection.title}</h2>
         <div className="section-actions">
-          <span>{getSectionCountLabel(rows.length, visibleRows)}</span>
-          <SectionToggle isExpanded={isExpanded} totalRows={rows.length} onToggle={onToggle} />
+          <span>{getSectionCountLabel(rows, visibleRows, rankingLimit)}</span>
+          <SectionToggle
+            isExpanded={isExpanded}
+            totalRows={Math.min(rows.length, rankingLimit)}
+            rankingLimit={rankingLimit}
+            onToggle={onToggle}
+          />
+          <TableActions
+            copied={copiedAction === `table-${financialCostSection.key}`}
+            onCopy={() => onCopyTable(financialCostSection, visibleRows)}
+            onExport={() => onExportCsv(financialCostSection, visibleRows)}
+          />
         </div>
       </div>
 
@@ -458,10 +795,13 @@ function FinancialCostSection({ rows, isExpanded, onToggle }) {
 export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [rankingLimit, setRankingLimit] = useState(DEFAULT_RANKING_LIMIT);
   const [expandedSections, setExpandedSections] = useState({});
+  const [copiedAction, setCopiedAction] = useState('');
   const [theme, setTheme] = useState(getInitialTheme);
   const workerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const copyFeedbackTimeoutRef = useRef(null);
 
   const isProcessing = state.status === 'processing';
   const activeFilters = getActiveFilters(filters);
@@ -475,6 +815,7 @@ export default function App() {
   useEffect(() => {
     return () => {
       workerRef.current?.terminate();
+      window.clearTimeout(copyFeedbackTimeoutRef.current);
     };
   }, []);
 
@@ -502,7 +843,9 @@ export default function App() {
 
     workerRef.current?.terminate();
     setFilters(INITIAL_FILTERS);
+    setRankingLimit(DEFAULT_RANKING_LIMIT);
     setExpandedSections({});
+    setCopiedAction('');
     const worker = new Worker(new URL('./workers/csvAnalyzer.worker.js', import.meta.url), {
       type: 'module',
     });
@@ -600,7 +943,9 @@ export default function App() {
       fileInputRef.current.value = '';
     }
     setFilters(INITIAL_FILTERS);
+    setRankingLimit(DEFAULT_RANKING_LIMIT);
     setExpandedSections({});
+    setCopiedAction('');
     setState(INITIAL_STATE);
   }
 
@@ -624,6 +969,108 @@ export default function App() {
       ...current,
       [sectionKey]: !current[sectionKey],
     }));
+  }
+
+  function showCopiedFeedback(actionKey) {
+    window.clearTimeout(copyFeedbackTimeoutRef.current);
+    setCopiedAction(actionKey);
+    copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setCopiedAction('');
+    }, 1800);
+  }
+
+  function copyWithFallback(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+  }
+
+  async function copyText(text, actionKey) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        copyWithFallback(text);
+      }
+    } catch {
+      copyWithFallback(text);
+    }
+
+    showCopiedFeedback(actionKey);
+  }
+
+  function downloadText(content, fileName, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function getReportMarkdown() {
+    return buildReportMarkdown({
+      results: state.results,
+      rankingLimit,
+      filters,
+    });
+  }
+
+  function copyReport() {
+    copyText(getReportMarkdown(), 'report');
+  }
+
+  function downloadReport(extension) {
+    const content = getReportMarkdown();
+    downloadText(
+      content,
+      makeDownloadName('relatorio-analisador-bonus', extension),
+      extension === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8',
+    );
+  }
+
+  function getTableData(section, rows) {
+    return section.key === financialCostSection.key
+      ? getFinancialTableData(rows)
+      : getSimpleTableData(section, rows);
+  }
+
+  function copyTable(section, rows) {
+    const tableData = getTableData(section, rows);
+    copyText(buildMarkdownTable(tableData.headers, tableData.rows), `table-${section.key}`);
+  }
+
+  function copyCampaignReports(section, rows) {
+    const reports = rows
+      .map((row) => state.results?.campaignReports?.[row.name])
+      .filter(Boolean);
+
+    copyText(
+      buildCampaignReportsMarkdown({
+        reports,
+        sectionTitle: section.title,
+        filters,
+      }),
+      `campaign-table-${section.key}`,
+    );
+  }
+
+  function exportCsv(section, rows) {
+    const tableData = getTableData(section, rows);
+    downloadText(
+      buildCsv(tableData.headers, tableData.rows),
+      makeDownloadName(section.key, 'csv'),
+      'text/csv;charset=utf-8',
+    );
   }
 
   return (
@@ -724,10 +1171,22 @@ export default function App() {
             ))}
           </section>
 
+          <ReportPanel
+            copied={copiedAction === 'report'}
+            rankingLimit={rankingLimit}
+            onCopyReport={copyReport}
+            onDownloadReport={downloadReport}
+            onRankingLimitChange={setRankingLimit}
+          />
+
           <div className="analysis-grid">
             <FinancialCostSection
               rows={state.results[financialCostSection.key] || []}
+              rankingLimit={rankingLimit}
               isExpanded={Boolean(expandedSections[financialCostSection.key])}
+              copiedAction={copiedAction}
+              onCopyTable={copyTable}
+              onExportCsv={exportCsv}
               onToggle={() => toggleSection(financialCostSection.key)}
             />
 
@@ -736,8 +1195,13 @@ export default function App() {
                 key={section.key}
                 section={section}
                 rows={state.results[section.key] || []}
+                rankingLimit={rankingLimit}
                 isExpanded={Boolean(expandedSections[section.key])}
+                copiedAction={copiedAction}
+                onCopyTable={copyTable}
+                onExportCsv={exportCsv}
                 onToggle={() => toggleSection(section.key)}
+                onCopyCampaignReports={copyCampaignReports}
               />
             ))}
           </div>

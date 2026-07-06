@@ -161,6 +161,7 @@ h2 {
 .upload-panel,
 .status-panel,
 .filter-panel,
+.report-panel,
 .empty-state,
 .no-results-state,
 .analysis-section {
@@ -442,6 +443,85 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.report-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 18px 20px;
+}
+
+.report-panel h2 {
+  margin-bottom: 4px;
+}
+
+.report-panel p {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.ranking-control {
+  display: grid;
+  gap: 6px;
+  min-width: 116px;
+}
+
+.ranking-control span {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ranking-control select {
+  min-height: 36px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.report-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compact-button {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 12px;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.compact-button:hover {
+  filter: brightness(0.98);
+}
+
+.copy-feedback {
+  color: var(--brand);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .analysis-grid {
   display: grid;
   gap: 18px;
@@ -479,19 +559,6 @@ h2 {
   font-weight: 800;
 }
 
-.section-toggle-button {
-  min-height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-bg);
-  color: var(--text);
-  cursor: pointer;
-  padding: 0 12px;
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.section-toggle-button:hover,
 .secondary-button:hover,
 .clear-filters-button:hover,
 .file-button:hover {
@@ -600,6 +667,12 @@ th:last-child {
   font-variant-numeric: tabular-nums;
 }
 
+.number-cell {
+  width: 150px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .financial-cost-table td:nth-child(1),
 .financial-cost-table td:nth-child(2) {
   max-width: 280px;
@@ -648,6 +721,7 @@ th:last-child {
 
   .section-title,
   .filter-header,
+  .report-panel,
   .status-panel > div:first-child,
   .progress-label {
     align-items: flex-start;
@@ -656,6 +730,20 @@ th:last-child {
 
   .section-actions {
     justify-content: flex-start;
+  }
+
+  .report-actions,
+  .report-button-row {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .ranking-control {
+    width: 100%;
+  }
+
+  .compact-button {
+    flex: 1;
   }
 
   .filter-header .clear-filters-button,

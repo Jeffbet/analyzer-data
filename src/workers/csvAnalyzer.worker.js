@@ -7,6 +7,7 @@ const REQUIRED_COLUMNS = [
 
 const OPTIONAL_COLUMNS = ['bonus_type', 'ext_template_name'];
 const FILTER_COLUMNS = ['crm_brand_name', 'bonus_status', 'bonus_type'];
+const MAX_TOP_ROWS = 50;
 
 let storedRows = [];
 let storedWarnings = [];
@@ -203,6 +204,13 @@ function buildResults(rows, warnings, filterOptions) {
     }
   }
 
+  const topCampaignsByCount = mapToTopRows(campaignCounts);
+  const topCampaignsByAmount = mapToTopRows(campaignAmounts);
+  const campaignReportNames = new Set([
+    ...topCampaignsByCount.map((row) => row.name),
+    ...topCampaignsByAmount.map((row) => row.name),
+  ]);
+
   return {
     summary: {
       totalRows: totals.rows,
@@ -213,12 +221,13 @@ function buildResults(rows, warnings, filterOptions) {
       totalCashback: roundNumber(totals.cashback),
       cashbackRows: totals.cashbackRows,
     },
-    topCampaignsByCount: mapToTopRows(campaignCounts),
-    topCampaignsByAmount: mapToTopRows(campaignAmounts),
+    topCampaignsByCount,
+    topCampaignsByAmount,
     topTemplatesByCount: mapToTopRows(templateCounts),
     topTemplatesByAmount: mapToTopRows(templateAmounts),
     topCashbackByValue: mapToTopRows(cashbackValues),
     topFinancialCostByCampaignTemplate: financialCostGroupsToTopRows(financialCostGroups),
+    campaignReports: buildCampaignReports(rows, campaignReportNames),
     warnings,
     filterOptions,
   };
@@ -522,7 +531,7 @@ function mapToTopRows(map) {
   return Array.from(map.entries())
     .map(([name, value]) => ({ name, value: roundNumber(value) }))
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'pt-BR'))
-    .slice(0, 20);
+    .slice(0, MAX_TOP_ROWS);
 }
 
 function financialCostGroupsToTopRows(map) {
@@ -549,7 +558,63 @@ function financialCostGroupsToTopRows(map) {
         a.campaignName.localeCompare(b.campaignName, 'pt-BR') ||
         a.templateName.localeCompare(b.templateName, 'pt-BR'),
     )
-    .slice(0, 20);
+    .slice(0, MAX_TOP_ROWS);
+}
+
+function buildCampaignReports(rows, campaignNames) {
+  const campaignReports = {};
+
+  for (const campaignName of campaignNames) {
+    campaignReports[campaignName] = {
+      campaignName,
+      sentCount: 0,
+      sentAmount: 0,
+      financialCostTotal: 0,
+      cashbackRows: 0,
+      cashbackAmount: 0,
+      uniqueTemplates: new Set(),
+      templateCounts: new Map(),
+      templateAmounts: new Map(),
+      financialCostGroups: new Map(),
+    };
+  }
+
+  for (const row of rows) {
+    const report = campaignReports[row.campaignName];
+    if (!report) continue;
+
+    report.sentCount += 1;
+    report.sentAmount += row.amount;
+    report.financialCostTotal += row.cost * row.amount;
+    if (row.templateName !== '(vazio)') report.uniqueTemplates.add(row.templateName);
+    incrementMap(report.templateCounts, row.templateName, 1);
+    incrementMap(report.templateAmounts, row.templateName, row.amount);
+    incrementFinancialCostGroup(report.financialCostGroups, row);
+
+    if (row.isCashback) {
+      report.cashbackRows += 1;
+      report.cashbackAmount += row.amount;
+    }
+  }
+
+  return Object.entries(campaignReports).reduce((reports, [campaignName, report]) => {
+    reports[campaignName] = {
+      campaignName,
+      sentCount: report.sentCount,
+      sentAmount: roundNumber(report.sentAmount),
+      financialCostTotal: roundNumber(report.financialCostTotal),
+      averageFinancialCostPerSend: roundNumber(
+        report.sentCount > 0 ? report.financialCostTotal / report.sentCount : 0,
+      ),
+      cashbackRows: report.cashbackRows,
+      cashbackAmount: roundNumber(report.cashbackAmount),
+      uniqueTemplates: report.uniqueTemplates.size,
+      topTemplatesByCount: mapToTopRows(report.templateCounts).slice(0, 10),
+      topTemplatesByAmount: mapToTopRows(report.templateAmounts).slice(0, 10),
+      topFinancialCostByTemplate: financialCostGroupsToTopRows(report.financialCostGroups).slice(0, 10),
+    };
+    return reports;
+  }, {});
 }
 
 function roundNumber(value) {
