@@ -25,6 +25,8 @@ const INITIAL_FILTERS = {
   bonusType: '',
 };
 
+const COLLAPSED_TOP_LIMIT = 5;
+
 const filterLabels = {
   search: 'Busca',
   crmBrandName: 'Marca CRM',
@@ -50,7 +52,7 @@ const summaryCards = [
 const resultSections = [
   {
     key: 'topCampaignsByCount',
-    title: 'Top 20 campanhas por quantidade de envios',
+    title: 'Campanhas por quantidade de envios',
     nameLabel: 'Campanha',
     valueLabel: 'Envios',
     valueType: 'integer',
@@ -58,7 +60,7 @@ const resultSections = [
   },
   {
     key: 'topCampaignsByAmount',
-    title: 'Top 20 campanhas por soma de bonus_amount',
+    title: 'Campanhas por soma de bonus_amount',
     nameLabel: 'Campanha',
     valueLabel: 'Bonus amount',
     valueType: 'decimal',
@@ -66,7 +68,7 @@ const resultSections = [
   },
   {
     key: 'topTemplatesByCount',
-    title: 'Top 20 templates por quantidade de envios',
+    title: 'Templates por quantidade de envios',
     nameLabel: 'Template',
     valueLabel: 'Envios',
     valueType: 'integer',
@@ -74,7 +76,7 @@ const resultSections = [
   },
   {
     key: 'topTemplatesByAmount',
-    title: 'Top 20 templates por soma de bonus_amount',
+    title: 'Templates por soma de bonus_amount',
     nameLabel: 'Template',
     valueLabel: 'Bonus amount',
     valueType: 'decimal',
@@ -89,6 +91,26 @@ const resultSections = [
     color: '#5a3d8c',
   },
 ];
+
+const financialCostSection = {
+  key: 'topFinancialCostByCampaignTemplate',
+  title: 'Campanhas e jogos por custo financeiro',
+  nameLabel: 'Campanha / Template',
+  valueLabel: 'Custo financeiro total',
+  valueType: 'decimal',
+  color: '#0f766e',
+  labelMaxLength: 30,
+  yAxisWidth: 260,
+};
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') return 'light';
+
+  const storedTheme = window.localStorage.getItem('analyzer-theme');
+  if (storedTheme === 'dark' || storedTheme === 'light') return storedTheme;
+
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(value || 0);
@@ -216,7 +238,7 @@ function EmptyState() {
   return (
     <section className="empty-state">
       <h2>Nenhum CSV carregado</h2>
-      <p>Importe um arquivo para gerar os cards, filtros, graficos e tabelas Top 20.</p>
+      <p>Importe um arquivo para gerar os cards, filtros, graficos e tabelas.</p>
     </section>
   );
 }
@@ -258,38 +280,40 @@ function ChartTooltip({ active, payload, label, section }) {
 function TopChart({ section, rows }) {
   const chartData = rows.map((row) => ({
     ...row,
-    chartLabel: truncateLabel(row.name),
+    chartLabel: truncateLabel(row.name, section.labelMaxLength),
   }));
+  const chartHeight = section.chartHeight || Math.max(260, rows.length * 30 + 90);
+  const yAxisWidth = section.yAxisWidth || 220;
 
   return (
     <div className="chart-box" aria-label={section.title}>
       {rows.length === 0 ? (
         <p className="empty-chart">Nenhum registro para gerar o grafico.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={460}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart
             data={chartData}
             layout="vertical"
             margin={{ top: 8, right: 20, bottom: 8, left: 8 }}
           >
-            <CartesianGrid stroke="#e7eaee" horizontal={false} />
+            <CartesianGrid stroke="var(--chart-grid)" horizontal={false} />
             <XAxis
               type="number"
               tickFormatter={(value) => formatValue(value, section.valueType)}
-              tick={{ fill: '#667085', fontSize: 12 }}
+              tick={{ fill: 'var(--muted)', fontSize: 12 }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
               type="category"
               dataKey="chartLabel"
-              width={220}
-              tick={{ fill: '#344054', fontSize: 12 }}
+              width={yAxisWidth}
+              tick={{ fill: 'var(--text)', fontSize: 12 }}
               axisLine={false}
               tickLine={false}
               interval={0}
             />
-            <Tooltip content={<ChartTooltip section={section} />} cursor={{ fill: '#f2f4f7' }} />
+            <Tooltip content={<ChartTooltip section={section} />} cursor={{ fill: 'var(--chart-cursor)' }} />
             <Bar dataKey="value" fill={section.color} radius={[0, 6, 6, 0]} barSize={14} />
           </BarChart>
         </ResponsiveContainer>
@@ -331,17 +355,101 @@ function ResultsTable({ section, rows }) {
   );
 }
 
-function AnalysisSection({ section, rows }) {
+function SectionToggle({ isExpanded, totalRows, onToggle }) {
+  if (totalRows <= COLLAPSED_TOP_LIMIT) return null;
+
+  return (
+    <button type="button" className="section-toggle-button" onClick={onToggle}>
+      {isExpanded ? 'Mostrar Top 5' : `Mostrar Top ${totalRows}`}
+    </button>
+  );
+}
+
+function getVisibleRows(rows, isExpanded) {
+  return isExpanded ? rows : rows.slice(0, COLLAPSED_TOP_LIMIT);
+}
+
+function getSectionCountLabel(totalRows, visibleRows) {
+  if (totalRows === 0) return '0 registros';
+  return `Top ${visibleRows.length} de ${totalRows}`;
+}
+
+function AnalysisSection({ section, rows, isExpanded, onToggle }) {
+  const visibleRows = getVisibleRows(rows, isExpanded);
+
   return (
     <section className="analysis-section">
       <div className="section-title">
         <h2>{section.title}</h2>
-        <span>{rows.length} registros</span>
+        <div className="section-actions">
+          <span>{getSectionCountLabel(rows.length, visibleRows)}</span>
+          <SectionToggle isExpanded={isExpanded} totalRows={rows.length} onToggle={onToggle} />
+        </div>
       </div>
 
       <div className="analysis-content">
-        <TopChart section={section} rows={rows} />
-        <ResultsTable section={section} rows={rows} />
+        <TopChart section={section} rows={visibleRows} />
+        <ResultsTable section={section} rows={visibleRows} />
+      </div>
+    </section>
+  );
+}
+
+function FinancialCostTable({ rows }) {
+  return (
+    <div className="table-wrap table-wrap--wide">
+      <table className="financial-cost-table">
+        <thead>
+          <tr>
+            <th>Campanha</th>
+            <th>Jogo / Template</th>
+            <th>Qtd envios</th>
+            <th>Qtd enviada</th>
+            <th>Custo financeiro total</th>
+            <th>Custo medio por envio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan="6" className="empty-cell">
+                Nenhum registro encontrado.
+              </td>
+            </tr>
+          ) : (
+            rows.map((row, index) => (
+              <tr key={`${row.campaignName}-${row.templateName}-${index}`}>
+                <td title={row.campaignName}>{row.campaignName}</td>
+                <td title={row.templateName}>{row.templateName}</td>
+                <td>{formatNumber(row.sentCount)}</td>
+                <td>{formatDecimal(row.sentAmount)}</td>
+                <td>{formatDecimal(row.financialCostTotal)}</td>
+                <td>{formatDecimal(row.averageFinancialCostPerSend)}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FinancialCostSection({ rows, isExpanded, onToggle }) {
+  const visibleRows = getVisibleRows(rows, isExpanded);
+
+  return (
+    <section className="analysis-section analysis-section--financial">
+      <div className="section-title">
+        <h2>{financialCostSection.title}</h2>
+        <div className="section-actions">
+          <span>{getSectionCountLabel(rows.length, visibleRows)}</span>
+          <SectionToggle isExpanded={isExpanded} totalRows={rows.length} onToggle={onToggle} />
+        </div>
+      </div>
+
+      <div className="analysis-content analysis-content--financial">
+        <TopChart section={financialCostSection} rows={visibleRows} />
+        <FinancialCostTable rows={visibleRows} />
       </div>
     </section>
   );
@@ -350,6 +458,8 @@ function AnalysisSection({ section, rows }) {
 export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [expandedSections, setExpandedSections] = useState({});
+  const [theme, setTheme] = useState(getInitialTheme);
   const workerRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -367,6 +477,11 @@ export default function App() {
       workerRef.current?.terminate();
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem('analyzer-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     if (state.status !== 'done' || !workerRef.current) return undefined;
@@ -387,6 +502,7 @@ export default function App() {
 
     workerRef.current?.terminate();
     setFilters(INITIAL_FILTERS);
+    setExpandedSections({});
     const worker = new Worker(new URL('./workers/csvAnalyzer.worker.js', import.meta.url), {
       type: 'module',
     });
@@ -484,6 +600,7 @@ export default function App() {
       fileInputRef.current.value = '';
     }
     setFilters(INITIAL_FILTERS);
+    setExpandedSections({});
     setState(INITIAL_STATE);
   }
 
@@ -498,6 +615,17 @@ export default function App() {
     setFilters(INITIAL_FILTERS);
   }
 
+  function toggleTheme() {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }
+
+  function toggleSection(sectionKey) {
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -505,9 +633,14 @@ export default function App() {
           <p className="eyebrow">MVP web local</p>
           <h1>Analisador de Bonus</h1>
         </div>
-        <button type="button" className="secondary-button" onClick={resetFile} disabled={isProcessing}>
-          Limpar
-        </button>
+        <div className="header-actions">
+          <button type="button" className="secondary-button" onClick={toggleTheme}>
+            {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+          </button>
+          <button type="button" className="secondary-button" onClick={resetFile} disabled={isProcessing}>
+            Limpar
+          </button>
+        </div>
       </header>
 
       <section className="upload-panel" onDrop={handleDrop} onDragOver={handleDragOver}>
@@ -592,11 +725,19 @@ export default function App() {
           </section>
 
           <div className="analysis-grid">
+            <FinancialCostSection
+              rows={state.results[financialCostSection.key] || []}
+              isExpanded={Boolean(expandedSections[financialCostSection.key])}
+              onToggle={() => toggleSection(financialCostSection.key)}
+            />
+
             {resultSections.map((section) => (
               <AnalysisSection
                 key={section.key}
                 section={section}
                 rows={state.results[section.key] || []}
+                isExpanded={Boolean(expandedSections[section.key])}
+                onToggle={() => toggleSection(section.key)}
               />
             ))}
           </div>

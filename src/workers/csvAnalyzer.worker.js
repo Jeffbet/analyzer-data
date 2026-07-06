@@ -179,6 +179,7 @@ function buildResults(rows, warnings, filterOptions) {
   const templateCounts = new Map();
   const templateAmounts = new Map();
   const cashbackValues = new Map();
+  const financialCostGroups = new Map();
 
   for (const row of rows) {
     totals.rows += 1;
@@ -191,6 +192,7 @@ function buildResults(rows, warnings, filterOptions) {
     incrementMap(campaignAmounts, row.campaignName, row.amount);
     incrementMap(templateCounts, row.templateName, 1);
     incrementMap(templateAmounts, row.templateName, row.amount);
+    incrementFinancialCostGroup(financialCostGroups, row);
 
     if (row.isCashback) {
       totals.cashbackRows += 1;
@@ -216,6 +218,7 @@ function buildResults(rows, warnings, filterOptions) {
     topTemplatesByCount: mapToTopRows(templateCounts),
     topTemplatesByAmount: mapToTopRows(templateAmounts),
     topCashbackByValue: mapToTopRows(cashbackValues),
+    topFinancialCostByCampaignTemplate: financialCostGroupsToTopRows(financialCostGroups),
     warnings,
     filterOptions,
   };
@@ -499,10 +502,53 @@ function incrementMap(map, key, amount) {
   map.set(key, (map.get(key) || 0) + amount);
 }
 
+function incrementFinancialCostGroup(map, row) {
+  const key = JSON.stringify([row.campaignName, row.templateName]);
+  const current = map.get(key) || {
+    campaignName: row.campaignName,
+    templateName: row.templateName,
+    sentCount: 0,
+    sentAmount: 0,
+    financialCostTotal: 0,
+  };
+
+  current.sentCount += 1;
+  current.sentAmount += row.amount;
+  current.financialCostTotal += row.cost * row.amount;
+  map.set(key, current);
+}
+
 function mapToTopRows(map) {
   return Array.from(map.entries())
     .map(([name, value]) => ({ name, value: roundNumber(value) }))
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'pt-BR'))
+    .slice(0, 20);
+}
+
+function financialCostGroupsToTopRows(map) {
+  return Array.from(map.values())
+    .map((group) => {
+      const financialCostTotal = roundNumber(group.financialCostTotal);
+
+      return {
+        campaignName: group.campaignName,
+        templateName: group.templateName,
+        sentCount: group.sentCount,
+        sentAmount: roundNumber(group.sentAmount),
+        financialCostTotal,
+        averageFinancialCostPerSend: roundNumber(
+          group.sentCount > 0 ? group.financialCostTotal / group.sentCount : 0,
+        ),
+        name: `${group.campaignName} / ${group.templateName}`,
+        value: financialCostTotal,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.financialCostTotal - a.financialCostTotal ||
+        a.campaignName.localeCompare(b.campaignName, 'pt-BR') ||
+        a.templateName.localeCompare(b.templateName, 'pt-BR'),
+    )
     .slice(0, 20);
 }
 
