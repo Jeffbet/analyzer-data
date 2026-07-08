@@ -389,6 +389,35 @@ h2 {
   cursor: pointer;
 }
 
+.period-filter-group {
+  min-width: 0;
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.period-filter-group legend {
+  padding: 0 6px;
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.period-filter-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.period-filter-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
 .filter-control input:focus,
 .filter-control select:focus {
   border-color: var(--brand);
@@ -1042,5 +1071,9 @@ th:last-child {
 
   .filter-control--wide {
     grid-column: auto;
+  }
+
+  .period-filter-controls {
+    grid-template-columns: 1fr;
   }
 }

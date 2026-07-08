@@ -1,3 +1,9 @@
+import {
+  parseCrmDateToBrasiliaTimestamp,
+  parseDateTimeLocalTimestamp,
+  timestampMatchesPeriod,
+} from '../utils/bonusPeriod.js';
+
 const REQUIRED_COLUMNS = [
   'bonus_amount',
   'bonus_cost_value',
@@ -115,11 +121,13 @@ async function analyzeCsvFile(file) {
     extTemplate: columnMap.ext_template_name,
     crmBrandName: columnMap.crm_brand_name,
     bonusStatus: columnMap.bonus_status,
+    createDate: columnMap.create_date,
   };
 
   let isHeader = true;
   let loadedBytes = 0;
   let parsedRows = 0;
+  let invalidCreateDateCount = 0;
   let lastProgressAt = 0;
   const decoder = new TextDecoder('utf-8');
   const parser = createCsvParser(delimiter, (row) => {
@@ -140,9 +148,14 @@ async function analyzeCsvFile(file) {
       indexes.crmBrandName === undefined ? '' : cleanText(row[indexes.crmBrandName]);
     const bonusStatus =
       indexes.bonusStatus === undefined ? '' : cleanText(row[indexes.bonusStatus]);
+    const createDateTimestamp =
+      indexes.createDate === undefined
+        ? null
+        : parseCrmDateToBrasiliaTimestamp(row[indexes.createDate]);
     const amount = parseNumber(row[indexes.amount]);
     const cost = parseNumber(row[indexes.cost]);
     const isCashback = hasCashbackText([templateName, bonusType, extTemplate]);
+    if (createDateTimestamp === null) invalidCreateDateCount += 1;
 
     addFilterOption('crmBrandName', crmBrandName);
     addFilterOption('bonusStatus', bonusStatus);
@@ -156,6 +169,7 @@ async function analyzeCsvFile(file) {
       extTemplate,
       crmBrandName,
       bonusStatus,
+      createDateTimestamp,
       amount,
       cost,
       isCashback,
@@ -184,6 +198,11 @@ async function analyzeCsvFile(file) {
 
   parser.push(decoder.decode());
   parser.finish();
+  if (invalidCreateDateCount > 0) {
+    warnings.push(
+      `${invalidCreateDateCount} registro(s) com create_date ausente ou invalida. Esses registros so serao excluidos quando houver filtro de periodo.`,
+    );
+  }
   storedFilterOptions = sortFilterOptions(storedFilterOptions);
 
   return buildResults(storedRows, warnings, storedFilterOptions);
@@ -263,12 +282,26 @@ function filterRows(rows, filters = {}) {
   const crmBrandName = filters.crmBrandName || '';
   const bonusStatus = filters.bonusStatus || '';
   const bonusType = filters.bonusType || '';
+  const periodStart = filters.periodStart
+    ? parseDateTimeLocalTimestamp(filters.periodStart)
+    : null;
+  const periodEnd = filters.periodEnd ? parseDateTimeLocalTimestamp(filters.periodEnd) : null;
+  const hasPeriodFilter = Boolean(filters.periodStart || filters.periodEnd);
 
   return rows.filter((row) => {
     if (search && !row.searchText.includes(search)) return false;
     if (crmBrandName && row.crmBrandName !== crmBrandName) return false;
     if (bonusStatus && row.bonusStatus !== bonusStatus) return false;
     if (bonusType && row.bonusType !== bonusType) return false;
+    if (
+      !timestampMatchesPeriod(row.createDateTimestamp, {
+        active: hasPeriodFilter,
+        start: periodStart,
+        end: periodEnd,
+      })
+    ) {
+      return false;
+    }
     return true;
   });
 }

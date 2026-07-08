@@ -8,6 +8,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import {
+  formatDateTimeLocalValue,
+  parseDateTimeLocalTimestamp,
+} from './utils/bonusPeriod.js';
 
 const INITIAL_STATE = {
   status: 'idle',
@@ -23,6 +27,8 @@ const INITIAL_FILTERS = {
   crmBrandName: '',
   bonusStatus: '',
   bonusType: '',
+  periodStart: '',
+  periodEnd: '',
 };
 
 const DEFAULT_RANKING_LIMIT = 20;
@@ -44,6 +50,8 @@ const filterLabels = {
   crmBrandName: 'Marca CRM',
   bonusStatus: 'Status',
   bonusType: 'Tipo de bonus',
+  periodStart: 'Data/hora inicial',
+  periodEnd: 'Data/hora final',
 };
 
 const summaryCards = [
@@ -236,7 +244,9 @@ function getActiveFilterLabel(filters) {
   const activeFilters = getActiveFilters(filters);
   if (activeFilters.length === 0) return 'Nenhum filtro ativo';
 
-  return activeFilters.map(([key, value]) => `${filterLabels[key]}: ${value}`).join('; ');
+  return activeFilters
+    .map(([key, value]) => `${filterLabels[key]}: ${getFilterDisplayValue(key, value)}`)
+    .join('; ');
 }
 
 function getTopLabel(row, valueLabel, valueType) {
@@ -403,6 +413,27 @@ function getActiveFilters(filters) {
   return Object.entries(filters).filter(([, value]) => String(value || '').trim() !== '');
 }
 
+function getFilterDisplayValue(key, value) {
+  if (key === 'periodStart' || key === 'periodEnd') {
+    return formatDateTimeLocalValue(value);
+  }
+  return value;
+}
+
+function getPeriodValidationError(filters) {
+  const start = filters.periodStart
+    ? parseDateTimeLocalTimestamp(filters.periodStart)
+    : null;
+  const end = filters.periodEnd ? parseDateTimeLocalTimestamp(filters.periodEnd) : null;
+
+  if (filters.periodStart && start === null) return 'Informe uma data/hora inicial valida.';
+  if (filters.periodEnd && end === null) return 'Informe uma data/hora final valida.';
+  if (start !== null && end !== null && end < start) {
+    return 'A data/hora final deve ser igual ou posterior a data/hora inicial.';
+  }
+  return '';
+}
+
 function FilterSelect({ id, label, value, options, onChange }) {
   if (!options?.length) return null;
 
@@ -421,7 +452,7 @@ function FilterSelect({ id, label, value, options, onChange }) {
   );
 }
 
-function FilterPanel({ filters, filterOptions, isFiltering, onChange, onClear }) {
+function FilterPanel({ filters, filterOptions, isFiltering, periodError, onChange, onClear }) {
   const activeFilters = getActiveFilters(filters);
 
   return (
@@ -471,6 +502,37 @@ function FilterPanel({ filters, filterOptions, isFiltering, onChange, onClear })
           options={filterOptions.bonusType}
           onChange={(value) => onChange('bonusType', value)}
         />
+
+        <fieldset className="period-filter-group">
+          <legend>Período - horário de Brasília</legend>
+          <div className="period-filter-controls">
+            <label className="filter-control" htmlFor="period-start-filter">
+              <span>Data/hora inicial</span>
+              <input
+                id="period-start-filter"
+                type="datetime-local"
+                step="1"
+                value={filters.periodStart}
+                onChange={(event) => onChange('periodStart', event.target.value)}
+              />
+            </label>
+            <label className="filter-control" htmlFor="period-end-filter">
+              <span>Data/hora final</span>
+              <input
+                id="period-end-filter"
+                type="datetime-local"
+                step="1"
+                value={filters.periodEnd}
+                onChange={(event) => onChange('periodEnd', event.target.value)}
+              />
+            </label>
+          </div>
+          {periodError && (
+            <p className="period-filter-error" role="alert">
+              {periodError}
+            </p>
+          )}
+        </fieldset>
       </div>
 
       <div className="active-filter-row">
@@ -479,7 +541,7 @@ function FilterPanel({ filters, filterOptions, isFiltering, onChange, onClear })
         ) : (
           activeFilters.map(([key, value]) => (
             <span className="filter-chip" key={key}>
-              {filterLabels[key]}: {value}
+              {filterLabels[key]}: {getFilterDisplayValue(key, value)}
             </span>
           ))
         )}
@@ -1051,6 +1113,7 @@ export default function App() {
 
   const isProcessing = state.status === 'processing';
   const activeFilters = getActiveFilters(filters);
+  const periodError = getPeriodValidationError(filters);
   const hasNoFilteredResults =
     state.results && activeFilters.length > 0 && state.results.summary.totalRows === 0;
   const progressPercent = useMemo(() => {
@@ -1073,6 +1136,17 @@ export default function App() {
 
   useEffect(() => {
     if (state.status !== 'done' || !workerRef.current) return undefined;
+    if (periodError) {
+      setState((current) =>
+        current.isFiltering
+          ? {
+              ...current,
+              isFiltering: false,
+            }
+          : current,
+      );
+      return undefined;
+    }
 
     const timeout = window.setTimeout(() => {
       setState((current) => ({
@@ -1083,7 +1157,7 @@ export default function App() {
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [filters, state.fileName, state.status]);
+  }, [filters, periodError, state.fileName, state.status]);
 
   function processFile(file) {
     if (!file) return;
@@ -1364,7 +1438,7 @@ export default function App() {
   }
 
   function openParticipants(selection) {
-    if (!workerRef.current) return;
+    if (!workerRef.current || periodError) return;
 
     const requestId = participantRequestRef.current + 1;
     participantRequestRef.current = requestId;
@@ -1501,6 +1575,7 @@ export default function App() {
             filters={filters}
             filterOptions={state.results.filterOptions || INITIAL_FILTERS}
             isFiltering={state.isFiltering}
+            periodError={periodError}
             onChange={updateFilter}
             onClear={clearFilters}
           />
