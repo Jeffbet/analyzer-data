@@ -1,7 +1,7 @@
 .ftd-module {
-  width: min(1440px, calc(100% - 32px));
+  width: min(1360px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 28px 0 48px;
+  padding: 28px 0 56px;
 }
 
 .ftd-header {
@@ -15,7 +15,7 @@
 .ftd-header h1 {
   margin: 0;
   font-size: 2.35rem;
-  line-height: 1.1;
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
@@ -39,6 +39,11 @@
   padding: 0 16px;
   cursor: pointer;
   font-weight: 800;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
 }
 
 .ftd-primary-button {
@@ -46,11 +51,22 @@
   color: #ffffff;
 }
 
+.ftd-primary-button:not(:disabled):hover {
+  filter: brightness(0.96);
+}
+
 .ftd-secondary-button,
 .ftd-file-button {
   border-color: var(--border);
   background: var(--panel-bg);
   color: var(--text);
+}
+
+.ftd-secondary-button:not(:disabled):hover,
+.ftd-file-button:not(:has(input:disabled)):hover {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 .ftd-primary-button:disabled,
@@ -71,12 +87,18 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
+  min-height: 116px;
   gap: 18px;
-  padding: 20px;
+  padding: 18px 20px;
   border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
   border-radius: 8px;
   background: var(--panel-bg);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow);
+}
+
+.ftd-file-import:nth-child(2) {
+  border-left-color: var(--accent);
 }
 
 .ftd-file-import > div {
@@ -128,6 +150,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
 }
 
 .ftd-progress > div {
@@ -175,16 +198,20 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 22px;
 }
 
 .ftd-summary-grid article {
+  display: grid;
   min-width: 0;
-  padding: 16px;
+  min-height: 112px;
+  align-content: space-between;
+  padding: 15px 16px;
   border: 1px solid var(--border);
   border-top: 3px solid var(--brand);
   border-radius: 8px;
   background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
 }
 
 .ftd-summary-grid article:nth-child(3n + 2) {
@@ -204,24 +231,27 @@
 }
 
 .ftd-summary-grid strong {
-  display: block;
+  display: -webkit-box;
+  min-height: 2.7em;
   overflow: hidden;
   font-size: 1.25rem;
+  line-height: 1.35;
   letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .ftd-results {
-  margin-top: 28px;
-  padding-top: 22px;
+  margin-top: 30px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
 }
 
 .ftd-view-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  overflow-x: auto;
   border-bottom: 1px solid var(--border);
 }
 
@@ -235,10 +265,19 @@
   color: var(--muted-strong);
   cursor: pointer;
   font-weight: 800;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .ftd-view-tabs button.is-active {
   border-bottom-color: var(--brand);
+  color: var(--text);
+}
+
+.ftd-view-tabs button:not(.is-active):hover {
+  background: var(--panel-soft-bg);
   color: var(--text);
 }
 
@@ -247,7 +286,11 @@
   grid-template-columns: minmax(240px, 1fr) auto auto;
   gap: 12px;
   align-items: end;
-  padding: 18px 0;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft-bg);
 }
 
 .ftd-search-field,
@@ -267,6 +310,13 @@
   padding: 0 12px;
   background: var(--panel-bg);
   color: var(--text);
+}
+
+.ftd-search-field input:focus,
+.ftd-top-control select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  outline: 0;
 }
 
 .ftd-top-control select {
@@ -289,8 +339,10 @@
 .ftd-chart {
   width: 100%;
   min-height: 320px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border-soft);
+  margin: 18px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-bg);
 }
 
 .ftd-chart .recharts-cartesian-axis-tick-value {
@@ -307,11 +359,14 @@
 }
 
 .ftd-table-wrap {
+  max-width: 100%;
   width: 100%;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
+  scrollbar-gutter: stable;
 }
 
 .ftd-table {
@@ -385,7 +440,7 @@
 
 @media (max-width: 720px) {
   .ftd-module {
-    width: min(100% - 20px, 1440px);
+    width: min(100% - 20px, 1360px);
     padding-top: 20px;
   }
 
@@ -395,7 +450,7 @@
   }
 
   .ftd-header h1 {
-    font-size: 2rem;
+    font-size: 2.05rem;
   }
 
   .ftd-import-grid,
@@ -421,7 +476,44 @@
     flex-wrap: wrap;
   }
 
+  .ftd-export-actions .ftd-secondary-button {
+    flex: 1;
+  }
+
+  .ftd-view-tabs button {
+    flex: 1 1 180px;
+  }
+
   .ftd-chart {
-    overflow-x: auto;
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .ftd-header h1 {
+    font-size: 1.85rem;
+  }
+
+  .ftd-primary-button,
+  .ftd-secondary-button,
+  .ftd-file-button {
+    width: 100%;
+  }
+
+  .ftd-summary-grid article {
+    min-height: 104px;
+  }
+
+  .ftd-result-toolbar {
+    padding: 12px;
+  }
+
+  .ftd-export-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ftd-view-tabs button {
+    flex-basis: 100%;
   }
 }
