@@ -74,6 +74,34 @@ body {
   color: var(--text);
 }
 
+.module-navigation {
+  display: flex;
+  width: min(1280px, calc(100% - 32px));
+  margin: 16px auto 0;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft-bg);
+}
+
+.module-navigation button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.module-navigation button.is-active {
+  background: var(--panel-bg);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(31, 41, 55, 0.12);
+}
+
 button,
 input,
 select {
@@ -84,6 +112,18 @@ select {
   width: min(1280px, calc(100% - 32px));
   margin: 0 auto;
   padding: 32px 0 48px;
+}
+
+@media (max-width: 720px) {
+  .module-navigation {
+    width: calc(100% - 20px);
+  }
+
+  .module-navigation button {
+    min-width: 0;
+    flex: 1;
+    padding: 0 8px;
+  }
 }
 
 .app-header {
