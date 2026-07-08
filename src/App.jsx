@@ -28,6 +28,16 @@ const INITIAL_FILTERS = {
 const DEFAULT_RANKING_LIMIT = 20;
 const COLLAPSED_TOP_LIMIT = 5;
 const RANKING_LIMIT_OPTIONS = [10, 20, 50];
+const PARTICIPANT_PAGE_SIZE_OPTIONS = [100, 500];
+
+const INITIAL_PARTICIPANTS_MODAL = {
+  isOpen: false,
+  status: 'idle',
+  requestId: null,
+  selection: null,
+  data: null,
+  error: '',
+};
 
 const filterLabels = {
   search: 'Busca',
@@ -161,6 +171,29 @@ function escapeCsvCell(value) {
 
 function buildCsv(headers, rows) {
   return [headers, ...rows].map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
+}
+
+function getParticipantTableRows(participants = [], formatAmounts = true) {
+  return participants.map((row) => [
+    row.userExtId,
+    formatAmounts ? formatNumber(row.sendCount) : row.sendCount,
+    formatAmounts ? formatDecimal(row.spinsReceived) : row.spinsReceived,
+    formatAmounts ? formatDecimal(row.cashbackReceived) : row.cashbackReceived,
+    formatAmounts ? formatDecimal(row.totalBonusAmount) : row.totalBonusAmount,
+  ]);
+}
+
+function getParticipantTableData(participants = [], formatAmounts = true) {
+  return {
+    headers: [
+      'user_ext_id',
+      'qtd_envios',
+      'giros_recebidos',
+      'cashback_recebido',
+      'total_bonus_amount',
+    ],
+    rows: getParticipantTableRows(participants, formatAmounts),
+  };
 }
 
 function getSimpleTableData(section, rows) {
@@ -548,7 +581,9 @@ function isCampaignSection(section) {
   return section.key === 'topCampaignsByCount' || section.key === 'topCampaignsByAmount';
 }
 
-function ResultsTable({ section, rows }) {
+function ResultsTable({ section, rows, onOpenParticipants }) {
+  const showParticipantsAction = isCampaignSection(section);
+
   return (
     <div className="table-wrap">
       <table>
@@ -557,12 +592,13 @@ function ResultsTable({ section, rows }) {
             <th>#</th>
             <th>{section.nameLabel}</th>
             <th>{section.valueLabel}</th>
+            {showParticipantsAction && <th>Acao</th>}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan="3" className="empty-cell">
+              <td colSpan={showParticipantsAction ? 4 : 3} className="empty-cell">
                 Nenhum registro encontrado.
               </td>
             </tr>
@@ -572,6 +608,24 @@ function ResultsTable({ section, rows }) {
                 <td>{index + 1}</td>
                 <td title={row.name}>{row.name}</td>
                 <td className="number-cell">{formatValue(row.value, section.valueType)}</td>
+                {showParticipantsAction && (
+                  <td className="action-cell">
+                    <button
+                      type="button"
+                      className="row-action-button"
+                      title="Ver participantes"
+                      onClick={() =>
+                        onOpenParticipants({
+                          campaignName: row.name,
+                          templateName: '',
+                          includeTemplate: false,
+                        })
+                      }
+                    >
+                      Participantes
+                    </button>
+                  </td>
+                )}
               </tr>
             ))
           )}
@@ -679,6 +733,7 @@ function AnalysisSection({
   onExportCsv,
   onToggle,
   onCopyCampaignReports,
+  onOpenParticipants,
 }) {
   const visibleRows = getVisibleRows(rows, rankingLimit, isExpanded);
   const showCampaignReport = isCampaignSection(section);
@@ -708,13 +763,13 @@ function AnalysisSection({
 
       <div className="analysis-content">
         <TopChart section={section} rows={visibleRows} />
-        <ResultsTable section={section} rows={visibleRows} />
+        <ResultsTable section={section} rows={visibleRows} onOpenParticipants={onOpenParticipants} />
       </div>
     </section>
   );
 }
 
-function FinancialCostTable({ rows }) {
+function FinancialCostTable({ rows, onOpenParticipants }) {
   return (
     <div className="table-wrap table-wrap--wide">
       <table className="financial-cost-table">
@@ -726,12 +781,13 @@ function FinancialCostTable({ rows }) {
             <th>Qtd enviada</th>
             <th>Custo financeiro total</th>
             <th>Custo medio por envio</th>
+            <th>Acao</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan="6" className="empty-cell">
+              <td colSpan="7" className="empty-cell">
                 Nenhum registro encontrado.
               </td>
             </tr>
@@ -744,6 +800,22 @@ function FinancialCostTable({ rows }) {
                 <td>{formatDecimal(row.sentAmount)}</td>
                 <td>{formatDecimal(row.financialCostTotal)}</td>
                 <td>{formatDecimal(row.averageFinancialCostPerSend)}</td>
+                <td className="action-cell">
+                  <button
+                    type="button"
+                    className="row-action-button"
+                    title="Ver participantes"
+                    onClick={() =>
+                      onOpenParticipants({
+                        campaignName: row.campaignName,
+                        templateName: row.templateName,
+                        includeTemplate: true,
+                      })
+                    }
+                  >
+                    Participantes
+                  </button>
+                </td>
               </tr>
             ))
           )}
@@ -761,6 +833,7 @@ function FinancialCostSection({
   onCopyTable,
   onExportCsv,
   onToggle,
+  onOpenParticipants,
 }) {
   const visibleRows = getVisibleRows(rows, rankingLimit, isExpanded);
 
@@ -786,9 +859,178 @@ function FinancialCostSection({
 
       <div className="analysis-content analysis-content--financial">
         <TopChart section={financialCostSection} rows={visibleRows} />
-        <FinancialCostTable rows={visibleRows} />
+        <FinancialCostTable rows={visibleRows} onOpenParticipants={onOpenParticipants} />
       </div>
     </section>
+  );
+}
+
+function ParticipantModal({ modal, feedback, onClose, onCopyIds, onCopyTable, onDownloadCsv }) {
+  const [pageSize, setPageSize] = useState(PARTICIPANT_PAGE_SIZE_OPTIONS[0]);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+    setPageSize(PARTICIPANT_PAGE_SIZE_OPTIONS[0]);
+  }, [modal.requestId]);
+
+  useEffect(() => {
+    if (!modal.isOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [modal.isOpen, onClose]);
+
+  if (!modal.isOpen) return null;
+
+  const data = modal.data;
+  const selection = data || modal.selection || {};
+  const participants = data?.participants || [];
+  const totalPages = Math.max(1, Math.ceil(participants.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const visibleParticipants = participants.slice(startIndex, startIndex + pageSize);
+  const tableData = getParticipantTableData(visibleParticipants);
+  const hasParticipants = participants.length > 0;
+  const templateName = selection.templateName || '';
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="participant-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="participant-modal-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Participantes</p>
+            <h2 id="participant-modal-title">{selection.campaignName || 'Campanha'}</h2>
+            {templateName && <p>{templateName}</p>}
+          </div>
+          <button type="button" className="modal-close-button" onClick={onClose} aria-label="Fechar">
+            X
+          </button>
+        </div>
+
+        {modal.status === 'loading' && <p className="modal-status">Carregando participantes...</p>}
+        {modal.status === 'error' && <p className="error-message">{modal.error}</p>}
+
+        {data && (
+          <>
+            <div className="participant-summary-grid">
+              <article>
+                <span>Participantes unicos</span>
+                <strong>{formatNumber(data.uniqueParticipants)}</strong>
+              </article>
+              <article>
+                <span>Total de envios</span>
+                <strong>{formatNumber(data.totalSends)}</strong>
+              </article>
+              <article>
+                <span>Total bonus_amount</span>
+                <strong>{formatDecimal(data.totalBonusAmount)}</strong>
+              </article>
+              <article>
+                <span>Tipo na selecao</span>
+                <strong>{[data.hasCashback && 'cashback', data.hasSpins && 'giros'].filter(Boolean).join(' + ') || '-'}</strong>
+              </article>
+            </div>
+
+            <div className="participant-actions">
+              {feedback && <span className="copy-feedback">{feedback}</span>}
+              <button type="button" className="compact-button" onClick={onCopyIds} disabled={!hasParticipants}>
+                Copiar IDs
+              </button>
+              <button type="button" className="compact-button" onClick={onCopyTable} disabled={!hasParticipants}>
+                Copiar tabela
+              </button>
+              <button type="button" className="compact-button" onClick={onDownloadCsv} disabled={!hasParticipants}>
+                Baixar CSV
+              </button>
+            </div>
+
+            <div className="participant-pagination">
+              <span>
+                Mostrando {formatNumber(visibleParticipants.length)} de {formatNumber(participants.length)}
+              </span>
+              <label className="ranking-control" htmlFor="participant-page-size">
+                <span>Linhas</span>
+                <select
+                  id="participant-page-size"
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setPage(1);
+                  }}
+                >
+                  {PARTICIPANT_PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="participant-page-buttons">
+                <button
+                  type="button"
+                  className="compact-button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  Anterior
+                </button>
+                <span>
+                  {formatNumber(currentPage)} / {formatNumber(totalPages)}
+                </span>
+                <button
+                  type="button"
+                  className="compact-button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Proxima
+                </button>
+              </div>
+            </div>
+
+            <div className="table-wrap participant-table-wrap">
+              <table className="participant-table">
+                <thead>
+                  <tr>
+                    {tableData.headers.map((header) => (
+                      <th key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleParticipants.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="empty-cell">
+                        Nenhum participante encontrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    tableData.rows.map((row) => (
+                      <tr key={row[0]}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={`${row[0]}-${cellIndex}`}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -798,10 +1040,14 @@ export default function App() {
   const [rankingLimit, setRankingLimit] = useState(DEFAULT_RANKING_LIMIT);
   const [expandedSections, setExpandedSections] = useState({});
   const [copiedAction, setCopiedAction] = useState('');
+  const [participantModal, setParticipantModal] = useState(INITIAL_PARTICIPANTS_MODAL);
+  const [participantFeedback, setParticipantFeedback] = useState('');
   const [theme, setTheme] = useState(getInitialTheme);
   const workerRef = useRef(null);
   const fileInputRef = useRef(null);
   const copyFeedbackTimeoutRef = useRef(null);
+  const participantFeedbackTimeoutRef = useRef(null);
+  const participantRequestRef = useRef(0);
 
   const isProcessing = state.status === 'processing';
   const activeFilters = getActiveFilters(filters);
@@ -816,6 +1062,7 @@ export default function App() {
     return () => {
       workerRef.current?.terminate();
       window.clearTimeout(copyFeedbackTimeoutRef.current);
+      window.clearTimeout(participantFeedbackTimeoutRef.current);
     };
   }, []);
 
@@ -846,6 +1093,8 @@ export default function App() {
     setRankingLimit(DEFAULT_RANKING_LIMIT);
     setExpandedSections({});
     setCopiedAction('');
+    setParticipantModal(INITIAL_PARTICIPANTS_MODAL);
+    setParticipantFeedback('');
     const worker = new Worker(new URL('./workers/csvAnalyzer.worker.js', import.meta.url), {
       type: 'module',
     });
@@ -896,7 +1145,34 @@ export default function App() {
         return;
       }
 
+      if (type === 'participants') {
+        setParticipantModal((current) => {
+          if (current.requestId !== payload.requestId) return current;
+
+          return {
+            ...current,
+            status: 'done',
+            data: payload.participants,
+            error: '',
+          };
+        });
+        return;
+      }
+
       if (type === 'error') {
+        if (payload.requestId !== undefined) {
+          setParticipantModal((current) => {
+            if (current.requestId !== payload.requestId) return current;
+
+            return {
+              ...current,
+              status: 'error',
+              error: payload.message,
+            };
+          });
+          return;
+        }
+
         setState((current) => ({
           ...current,
           status: 'error',
@@ -946,10 +1222,14 @@ export default function App() {
     setRankingLimit(DEFAULT_RANKING_LIMIT);
     setExpandedSections({});
     setCopiedAction('');
+    setParticipantModal(INITIAL_PARTICIPANTS_MODAL);
+    setParticipantFeedback('');
     setState(INITIAL_STATE);
   }
 
   function updateFilter(key, value) {
+    setParticipantModal(INITIAL_PARTICIPANTS_MODAL);
+    setParticipantFeedback('');
     setFilters((current) => ({
       ...current,
       [key]: value,
@@ -957,6 +1237,8 @@ export default function App() {
   }
 
   function clearFilters() {
+    setParticipantModal(INITIAL_PARTICIPANTS_MODAL);
+    setParticipantFeedback('');
     setFilters(INITIAL_FILTERS);
   }
 
@@ -976,6 +1258,14 @@ export default function App() {
     setCopiedAction(actionKey);
     copyFeedbackTimeoutRef.current = window.setTimeout(() => {
       setCopiedAction('');
+    }, 1800);
+  }
+
+  function showParticipantFeedback(message) {
+    window.clearTimeout(participantFeedbackTimeoutRef.current);
+    setParticipantFeedback(message);
+    participantFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setParticipantFeedback('');
     }, 1800);
   }
 
@@ -1002,7 +1292,7 @@ export default function App() {
       copyWithFallback(text);
     }
 
-    showCopiedFeedback(actionKey);
+    if (actionKey) showCopiedFeedback(actionKey);
   }
 
   function downloadText(content, fileName, type) {
@@ -1071,6 +1361,58 @@ export default function App() {
       makeDownloadName(section.key, 'csv'),
       'text/csv;charset=utf-8',
     );
+  }
+
+  function openParticipants(selection) {
+    if (!workerRef.current) return;
+
+    const requestId = participantRequestRef.current + 1;
+    participantRequestRef.current = requestId;
+    setParticipantFeedback('');
+    setParticipantModal({
+      isOpen: true,
+      status: 'loading',
+      requestId,
+      selection,
+      data: null,
+      error: '',
+    });
+    workerRef.current.postMessage({
+      type: 'participants',
+      requestId,
+      filters,
+      selection,
+    });
+  }
+
+  function closeParticipants() {
+    setParticipantModal(INITIAL_PARTICIPANTS_MODAL);
+    setParticipantFeedback('');
+  }
+
+  function getParticipantData() {
+    return participantModal.data?.participants || [];
+  }
+
+  async function copyParticipantIds() {
+    await copyText(getParticipantData().map((row) => row.userExtId).join('\n'));
+    showParticipantFeedback('Copiado');
+  }
+
+  async function copyParticipantTable() {
+    const tableData = getParticipantTableData(getParticipantData());
+    await copyText(buildMarkdownTable(tableData.headers, tableData.rows));
+    showParticipantFeedback('Copiado');
+  }
+
+  function downloadParticipantCsv() {
+    const tableData = getParticipantTableData(getParticipantData(), false);
+    downloadText(
+      buildCsv(tableData.headers, tableData.rows),
+      makeDownloadName('participantes-campanha', 'csv'),
+      'text/csv;charset=utf-8',
+    );
+    showParticipantFeedback('CSV baixado');
   }
 
   return (
@@ -1188,6 +1530,7 @@ export default function App() {
               onCopyTable={copyTable}
               onExportCsv={exportCsv}
               onToggle={() => toggleSection(financialCostSection.key)}
+              onOpenParticipants={openParticipants}
             />
 
             {resultSections.map((section) => (
@@ -1202,9 +1545,19 @@ export default function App() {
                 onExportCsv={exportCsv}
                 onToggle={() => toggleSection(section.key)}
                 onCopyCampaignReports={copyCampaignReports}
+                onOpenParticipants={openParticipants}
               />
             ))}
           </div>
+
+          <ParticipantModal
+            modal={participantModal}
+            feedback={participantFeedback}
+            onClose={closeParticipants}
+            onCopyIds={copyParticipantIds}
+            onCopyTable={copyParticipantTable}
+            onDownloadCsv={downloadParticipantCsv}
+          />
         </>
       )}
     </main>

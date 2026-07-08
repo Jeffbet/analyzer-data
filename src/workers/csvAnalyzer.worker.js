@@ -5,7 +5,7 @@ const REQUIRED_COLUMNS = [
   'source_entity_name',
 ];
 
-const OPTIONAL_COLUMNS = ['bonus_type', 'ext_template_name'];
+const OPTIONAL_COLUMNS = ['bonus_type', 'ext_template_name', 'user_ext_id'];
 const FILTER_COLUMNS = ['crm_brand_name', 'bonus_status', 'bonus_type'];
 const MAX_TOP_ROWS = 50;
 
@@ -14,8 +14,11 @@ let storedWarnings = [];
 let storedFilterOptions = createEmptyFilterOptions();
 
 self.onmessage = async (event) => {
+  let requestId;
+
   try {
-    const { file, filters, type } = event.data;
+    const { file, filters, requestId: incomingRequestId, selection, type } = event.data;
+    requestId = incomingRequestId;
 
     if (type === 'filter') {
       if (storedRows.length === 0) {
@@ -26,6 +29,22 @@ self.onmessage = async (event) => {
       self.postMessage({
         type: 'filtered',
         payload: { results },
+      });
+      return;
+    }
+
+    if (type === 'participants') {
+      if (storedRows.length === 0) {
+        throw new Error('Carregue um CSV antes de consultar participantes.');
+      }
+
+      const participants = buildParticipants(filterRows(storedRows, filters), selection);
+      self.postMessage({
+        type: 'participants',
+        payload: {
+          requestId,
+          participants,
+        },
       });
       return;
     }
@@ -55,6 +74,7 @@ self.onmessage = async (event) => {
       type: 'error',
       payload: {
         message: error?.message || 'Erro inesperado ao processar o CSV.',
+        ...(requestId === undefined ? {} : { requestId }),
       },
     });
   }
@@ -78,8 +98,10 @@ async function analyzeCsvFile(file) {
     );
   }
 
-  const warnings = OPTIONAL_COLUMNS.filter((name) => columnMap[name] === undefined).map(
-    (name) => `Coluna opcional ausente: ${name}. A deteccao de cashback usara os campos disponiveis.`,
+  const warnings = OPTIONAL_COLUMNS.filter((name) => columnMap[name] === undefined).map((name) =>
+    name === 'user_ext_id'
+      ? 'Coluna opcional ausente: user_ext_id. A visualizacao de participantes ficara indisponivel.'
+      : `Coluna opcional ausente: ${name}. A deteccao de cashback usara os campos disponiveis.`,
   );
   storedWarnings = warnings;
 
@@ -88,6 +110,7 @@ async function analyzeCsvFile(file) {
     cost: columnMap.bonus_cost_value,
     template: columnMap.bonus_template_name,
     campaign: columnMap.source_entity_name,
+    userExtId: columnMap.user_ext_id,
     bonusType: columnMap.bonus_type,
     extTemplate: columnMap.ext_template_name,
     crmBrandName: columnMap.crm_brand_name,
@@ -110,6 +133,7 @@ async function analyzeCsvFile(file) {
 
     const templateName = cleanLabel(row[indexes.template]);
     const campaignName = cleanLabel(row[indexes.campaign]);
+    const userExtId = indexes.userExtId === undefined ? '' : cleanText(row[indexes.userExtId]);
     const bonusType = indexes.bonusType === undefined ? '' : cleanText(row[indexes.bonusType]);
     const extTemplate = indexes.extTemplate === undefined ? '' : cleanText(row[indexes.extTemplate]);
     const crmBrandName =
@@ -127,6 +151,7 @@ async function analyzeCsvFile(file) {
     storedRows.push({
       templateName,
       campaignName,
+      userExtId,
       bonusType,
       extTemplate,
       crmBrandName,
@@ -246,6 +271,73 @@ function filterRows(rows, filters = {}) {
     if (bonusType && row.bonusType !== bonusType) return false;
     return true;
   });
+}
+
+function buildParticipants(rows, selection = {}) {
+  const campaignName = selection?.campaignName || '';
+  const templateName = selection?.templateName || '';
+  const includeTemplate = Boolean(selection?.includeTemplate);
+  const participantGroups = new Map();
+  let totalSends = 0;
+  let totalBonusAmount = 0;
+  let hasCashback = false;
+  let hasSpins = false;
+
+  for (const row of rows) {
+    if (campaignName && row.campaignName !== campaignName) continue;
+    if (includeTemplate && row.templateName !== templateName) continue;
+
+    totalSends += 1;
+    totalBonusAmount += row.amount;
+    hasCashback = hasCashback || row.isCashback;
+    hasSpins = hasSpins || !row.isCashback;
+
+    const userExtId = row.userExtId;
+    if (!userExtId) continue;
+
+    const current = participantGroups.get(userExtId) || {
+      userExtId,
+      sendCount: 0,
+      spinsReceived: 0,
+      cashbackReceived: 0,
+      totalBonusAmount: 0,
+    };
+
+    current.sendCount += 1;
+    if (row.isCashback) {
+      current.cashbackReceived += row.amount;
+    } else {
+      current.spinsReceived += row.amount;
+    }
+    current.totalBonusAmount += row.amount;
+    participantGroups.set(userExtId, current);
+  }
+
+  const participants = Array.from(participantGroups.values())
+    .map((participant) => ({
+      userExtId: participant.userExtId,
+      sendCount: participant.sendCount,
+      spinsReceived: roundNumber(participant.spinsReceived),
+      cashbackReceived: roundNumber(participant.cashbackReceived),
+      totalBonusAmount: roundNumber(participant.totalBonusAmount),
+    }))
+    .sort(
+      (a, b) =>
+        b.totalBonusAmount - a.totalBonusAmount ||
+        b.sendCount - a.sendCount ||
+        a.userExtId.localeCompare(b.userExtId, 'pt-BR'),
+    );
+
+  return {
+    campaignName,
+    templateName: includeTemplate ? templateName : '',
+    uniqueParticipants: participants.length,
+    totalSends,
+    totalBonusAmount: roundNumber(totalBonusAmount),
+    hasCashback,
+    hasSpins,
+    participants,
+  };
 }
 
 async function readHeader(file, delimiter) {
