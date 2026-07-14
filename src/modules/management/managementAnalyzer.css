@@ -1,0 +1,222 @@
+.management-module {
+  width: min(1360px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 56px;
+}
+
+.management-header,
+.management-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.management-header { margin-bottom: 20px; }
+.management-header h1 { font-size: clamp(2rem, 4vw, 2.7rem); }
+.management-eyebrow,
+.management-kicker {
+  margin: 0 0 4px;
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.management-subtitle {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+
+.management-primary,
+.management-report-actions button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 18px;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.management-primary:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.management-import {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.management-file-field,
+.management-date-field {
+  min-height: 118px;
+  border: 1px dashed var(--input-border);
+  border-radius: 10px;
+  padding: 18px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.management-file-field {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.management-file-field > span,
+.management-date-field > span {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-file-field strong { margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.management-file-field small { margin-top: 3px; color: var(--muted); }
+.management-file-field input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.management-date-field { display: flex; flex-direction: column; justify-content: center; }
+.management-date-field span small { color: var(--muted); font-weight: 600; text-transform: none; }
+.management-date-field input,
+.management-filters input,
+.management-filters select {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 7px;
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  padding: 0 11px;
+  background: var(--panel-bg);
+  color: var(--text);
+}
+
+.management-progress,
+.management-alert,
+.management-empty {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px 15px;
+  background: var(--panel-bg);
+}
+
+.management-progress > div { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.management-progress progress { width: 100%; accent-color: var(--brand); }
+.management-alert { border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); background: color-mix(in srgb, var(--warning) 7%, var(--panel-bg)); color: var(--muted-strong); }
+.management-alert--error { border-color: var(--no-results-border); background: var(--no-results-bg); color: var(--danger); }
+.management-empty { padding: 36px 20px; color: var(--muted); text-align: center; }
+
+.management-source-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 18px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--border);
+}
+
+.management-source-summary div { display: flex; flex-direction: column; padding: 14px 16px; background: var(--panel-bg); }
+.management-source-summary span { color: var(--muted); font-size: 0.78rem; font-weight: 750; text-transform: uppercase; }
+.management-source-summary strong { margin-top: 3px; }
+
+.management-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.8fr 0.8fr 1.2fr;
+  gap: 12px;
+  margin: 18px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.management-filters label > span { color: var(--muted-strong); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
+
+.management-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.management-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 132px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 17px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.management-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--brand); content: ''; }
+.management-card span { display: block; min-height: 38px; color: var(--muted); font-size: 0.82rem; font-weight: 800; text-transform: uppercase; }
+.management-card strong { display: block; font-size: clamp(1.35rem, 2.4vw, 1.85rem); line-height: 1.18; }
+.management-card small { display: block; margin-top: 8px; color: var(--muted); }
+
+.management-panel,
+.management-report {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.management-panel h2,
+.management-report h2 { margin: 0; font-size: 1.18rem; }
+.management-metric-picks { display: flex; max-width: 760px; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.management-metric-picks label { display: flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; color: var(--muted-strong); cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+.management-metric-picks input { accent-color: var(--brand); }
+.management-chart-hint { margin: 9px 0 0; color: var(--muted); font-size: 0.85rem; }
+.management-chart { height: 360px; margin-top: 12px; }
+
+.management-tooltip { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--panel-bg); box-shadow: var(--tooltip-shadow); font-size: 0.82rem; }
+.management-table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; }
+.management-table-wrap table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 0.84rem; }
+.management-table-wrap th,
+.management-table-wrap td { border-bottom: 1px solid var(--border-soft); padding: 10px 12px; text-align: right; }
+.management-table-wrap th { position: sticky; top: 0; z-index: 1; background: var(--panel-soft-bg); color: var(--muted-strong); font-size: 0.74rem; text-transform: uppercase; }
+.management-table-wrap th:nth-child(-n+3),
+.management-table-wrap td:nth-child(-n+3) { text-align: left; }
+.management-table-wrap tbody tr:hover { background: var(--row-hover); }
+
+.management-report { border-left: 4px solid var(--brand); }
+.management-report-actions { display: flex; align-items: center; gap: 10px; }
+.management-report-actions button { min-height: 38px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); }
+.management-report-actions span { color: var(--brand); font-size: 0.82rem; font-weight: 800; }
+.management-report-text { max-width: 1000px; margin-top: 16px; color: var(--muted-strong); line-height: 1.7; }
+.management-report-text p { margin-bottom: 8px; }
+
+@media (max-width: 900px) {
+  .management-import { grid-template-columns: 1fr; }
+  .management-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .management-filters label:last-child { grid-column: 1 / -1; }
+  .management-panel-header { flex-direction: column; }
+  .management-metric-picks { justify-content: flex-start; }
+}
+
+@media (max-width: 620px) {
+  .management-module { width: min(100% - 20px, 1360px); padding-top: 22px; }
+  .management-header { flex-direction: column; }
+  .management-primary { width: 100%; }
+  .management-source-summary,
+  .management-filters { grid-template-columns: 1fr; }
+  .management-filters label:last-child { grid-column: auto; }
+  .management-card { min-height: 112px; }
+  .management-chart { height: 300px; }
+  .management-panel,
+  .management-report { padding: 16px; }
+  .management-report-actions { align-items: flex-start; flex-direction: column; }
+}

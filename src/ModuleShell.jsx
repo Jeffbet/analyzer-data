@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import App from './App.jsx';
 import FtdAnalyzer from './modules/ftd/FtdAnalyzer.jsx';
+import ManagementAnalyzer from './modules/management/ManagementAnalyzer.jsx';
 
 export default function ModuleShell() {
   const [activeModule, setActiveModule] = useState('bonus');
@@ -24,9 +25,19 @@ export default function ModuleShell() {
         >
           Cruzamento FTD
         </button>
+        <button
+          type="button"
+          className={activeModule === 'management' ? 'is-active' : ''}
+          aria-pressed={activeModule === 'management'}
+          onClick={() => setActiveModule('management')}
+        >
+          Monitoramento gerencial
+        </button>
       </nav>
 
-      {activeModule === 'bonus' ? <App /> : <FtdAnalyzer />}
+      {activeModule === 'bonus' && <App />}
+      {activeModule === 'ftd' && <FtdAnalyzer />}
+      {activeModule === 'management' && <ManagementAnalyzer />}
     </>
   );
 }
